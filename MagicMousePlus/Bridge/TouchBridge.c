@@ -27,6 +27,7 @@ static void (*unregisterFrame)(Device,Callback);
 static void *library;
 static Device selected;
 static MMFrameHandler sink;
+static bool hadActiveContact;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void frameCallback(Device device, Contact *contacts, int count, double time, int frame) {
@@ -46,7 +47,14 @@ static void frameCallback(Device device, Contact *contacts, int count, double ti
             if (!isfinite(output.x) || !isfinite(output.y) || output.x<0 || output.x>1 || output.y<0 || output.y>1) output.valid=false;
         }
     }
+    bool active = output.valid && output.count > 0;
+    // MultitouchSupport can emit an empty frame continuously while the
+    // mouse is idle. Deliver only contact frames and the one release frame
+    // needed to close a gesture; this keeps the login-item process quiet.
+    bool shouldDeliver = active || hadActiveContact || (!output.valid && count != 0);
+    hadActiveContact = active;
     pthread_mutex_unlock(&lock);
+    if (!shouldDeliver) return;
     // Never call into Swift while holding the device lifecycle mutex. A
     // permission/device transition can stop the bridge while a callback is
     // being delivered; the copied handler remains safe because it only
@@ -67,7 +75,7 @@ bool MMBridgeLoad(void) {
 }
 void MMBridgeStop(void) {
     pthread_mutex_lock(&lock);
-    Device old=selected; selected=NULL; sink=NULL;
+    Device old=selected; selected=NULL; sink=NULL; hadActiveContact=false;
     pthread_mutex_unlock(&lock);
     // Never hold the callback lock while asking the framework to stop.
     if (old) { unregisterFrame(old,frameCallback); stopDevice(old); CFRelease(old); }

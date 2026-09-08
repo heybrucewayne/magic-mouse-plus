@@ -18,7 +18,7 @@ Launch the built app and select **ALLOW ACCESS**, then enable **Magic Mouse +** 
 - Synthetic down/up pairs preserve keyboard modifiers, mark their origin to avoid feedback, and set double/triple-click counts. No held synthetic button or tap-and-drag behavior.
 - Settings changes, sleep, session lock, disconnect and permission loss cancel pending gestures. On startup or reconfiguration, any held contact must clear before taps are accepted. This can conservatively discard the first tap if the device has not yet emitted an empty frame.
 - Bounded, memory-only lifecycle log; no touch coordinates, typed input, or click history are retained. Preferences are local UserDefaults.
-- Main-thread engine state, copied callback values, mutex-protected C device lifecycle, no per-frame UI publishing, and a three-second timer with one-second tolerance for reconnection/permissions. No continuous animation or background rendering loop. Reduced Motion disables short control transitions.
+- Main-thread engine state, copied callback values, mutex-protected C device lifecycle, idle-frame coalescing, and adaptive refresh: 15 seconds while active, 4 seconds while reconnecting, 20 seconds while waiting for permissions, and 60 seconds when disabled. No continuous animation or background rendering loop. Reduced Motion disables short control transitions.
 
 MultitouchSupport is a private, undocumented API and can change across macOS versions. Unknown devices fail closed. This is a locally signed utility, not a notarized or App Store distribution. Device generation coverage and physical tap feel require hardware verification.
 

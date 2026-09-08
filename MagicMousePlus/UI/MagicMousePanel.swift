@@ -9,7 +9,7 @@ struct MagicMousePanel: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let panelWidth: CGFloat = 740
-    private let panelHeight: CGFloat = 740
+    private let panelHeight: CGFloat = 660
 
     var body: some View {
         ZStack {
@@ -24,8 +24,9 @@ struct MagicMousePanel: View {
                         heroHeader
                         statusCard
                         controlGrid
-                        permissionCard
-                        eventLog
+                        if !model.permissionGranted || model.status == "INPUT ACCESS NEEDED" {
+                            permissionCard
+                        }
                     }
                     .padding(28)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,30 +57,9 @@ struct MagicMousePanel: View {
                     .font(MagicMouseTheme.title)
                     .tracking(1.4)
                     .foregroundStyle(MagicMouseTheme.primaryText)
-
-                Text("TOUCH MORE.  DO MORE.")
-                    .font(MagicMouseTheme.monoSmall)
-                    .tracking(2)
-                    .foregroundStyle(MagicMouseTheme.accent)
-
-                Text("A small, private tap engine for macOS.")
-                    .font(MagicMouseTheme.body)
-                    .foregroundStyle(MagicMouseTheme.secondaryText)
             }
 
             Spacer(minLength: 10)
-
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("NATIVE UTILITY")
-                    .font(MagicMouseTheme.monoTiny)
-                    .tracking(1.2)
-                    .foregroundStyle(MagicMouseTheme.mutedText)
-
-                Text("NO NETWORK")
-                    .font(MagicMouseTheme.monoTiny)
-                    .tracking(1.2)
-                    .foregroundStyle(MagicMouseTheme.accent.opacity(0.9))
-            }
         }
         .padding(.bottom, 18)
         .overlay(alignment: .bottom) {
@@ -91,42 +71,21 @@ struct MagicMousePanel: View {
 
     private var statusCard: some View {
         PanelCard {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionLabel(text: "SYSTEM STATUS", symbol: "◈")
+            VStack(alignment: .leading, spacing: 12) {
+                SectionLabel(text: "STATUS", symbol: "◈")
 
                 HStack(alignment: .center, spacing: 14) {
                     StatusLamp(isActive: model.status == "ACTIVE")
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(model.status)
-                            .font(MagicMouseTheme.heading)
-                            .foregroundStyle(model.status == "ACTIVE" ? MagicMouseTheme.accent : MagicMouseTheme.secondaryText)
-
-                        Text(model.enabled ? "TAP TO CLICK ENABLED" : "TAP TO CLICK DISABLED")
-                            .font(MagicMouseTheme.monoSmall)
-                            .foregroundStyle(MagicMouseTheme.secondaryText)
-                            .lineLimit(1)
-                    }
+                    Text(model.status)
+                        .font(MagicMouseTheme.heading)
+                        .foregroundStyle(model.status == "ACTIVE" ? MagicMouseTheme.accent : MagicMouseTheme.secondaryText)
 
                     Spacer(minLength: 12)
 
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text(model.deviceConnected ? "MAGIC MOUSE" : (model.permissionGranted && model.enabled ? "NO DEVICE" : "DEVICE"))
-                            .font(MagicMouseTheme.monoSmall)
-                            .foregroundStyle(model.deviceConnected ? MagicMouseTheme.primaryText : MagicMouseTheme.warning)
-
-                        Text(model.deviceConnected ? "CONNECTED" : (model.permissionGranted && model.enabled ? "WAITING" : "NOT CHECKED"))
-                            .font(MagicMouseTheme.monoTiny)
-                            .foregroundStyle(MagicMouseTheme.secondaryText)
-                    }
-                }
-
-                HStack(spacing: 8) {
-                    SystemPill(label: model.permissionGranted ? "ACCESSIBILITY READY" : "ACCESSIBILITY NEEDED",
-                               active: model.permissionGranted)
-
-                    SystemPill(label: model.enabled ? "TAP ENGINE ON" : "TAP ENGINE OFF",
-                               active: model.enabled)
+                    Text(model.deviceConnected ? "CONNECTED" : "NO MOUSE")
+                        .font(MagicMouseTheme.monoSmall)
+                        .foregroundStyle(model.deviceConnected ? MagicMouseTheme.primaryText : MagicMouseTheme.warning)
                 }
             }
         }
@@ -136,11 +95,11 @@ struct MagicMousePanel: View {
         HStack(alignment: .top, spacing: 16) {
             PanelCard {
                 VStack(alignment: .leading, spacing: 14) {
-                    SectionLabel(text: "TAP CONTROLS", symbol: "⌁")
+                    SectionLabel(text: "TAPS", symbol: "⌁")
 
                     TerminalToggleRow(
                         title: "TAP TO CLICK",
-                        detail: "Enable surface taps",
+                        detail: nil,
                         isOn: Binding(
                             get: { model.enabled },
                             set: { model.enabled = $0 }
@@ -151,7 +110,7 @@ struct MagicMousePanel: View {
 
                     TerminalToggleRow(
                         title: "LEFT TAP",
-                        detail: "Left surface → click",
+                        detail: nil,
                         isOn: Binding(
                             get: { model.leftTap },
                             set: { model.leftTap = $0 }
@@ -161,7 +120,7 @@ struct MagicMousePanel: View {
 
                     TerminalToggleRow(
                         title: "RIGHT TAP",
-                        detail: "Right surface → right click",
+                        detail: nil,
                         isOn: Binding(
                             get: { model.rightTap },
                             set: { model.rightTap = $0 }
@@ -179,10 +138,6 @@ struct MagicMousePanel: View {
                                  rightEnabled: model.rightTap && model.enabled)
                         .frame(maxWidth: .infinity, minHeight: 164)
 
-                    Text("Touch either side without pressure.")
-                        .font(MagicMouseTheme.monoTiny)
-                        .foregroundStyle(MagicMouseTheme.mutedText)
-                        .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
         }
@@ -194,13 +149,11 @@ struct MagicMousePanel: View {
                 PermissionSeal(granted: model.permissionGranted)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(model.permissionGranted ? "ACCESSIBILITY READY" : "ACCESSIBILITY PERMISSION")
+                    Text(model.status == "INPUT ACCESS NEEDED" ? "INPUT MONITORING" : "ACCESSIBILITY")
                         .font(MagicMouseTheme.heading)
                         .foregroundStyle(MagicMouseTheme.primaryText)
 
-                    Text(model.permissionGranted
-                         ? (model.status == "INPUT ACCESS NEEDED" ? "Allow Input Monitoring to filter physical clicks." : "The tap engine can send native click events.")
-                         : "Allow Accessibility access to send left and right clicks.")
+                    Text("Permission needed")
                         .font(MagicMouseTheme.body)
                         .foregroundStyle(MagicMouseTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -212,7 +165,7 @@ struct MagicMousePanel: View {
                     Button {
                         model.requestPermission()
                     } label: {
-                        Text("ALLOW ACCESS")
+                        Text("ALLOW")
                             .font(MagicMouseTheme.monoSmall)
                             .tracking(0.8)
                             .foregroundStyle(MagicMouseTheme.background)
@@ -227,85 +180,50 @@ struct MagicMousePanel: View {
         }
     }
 
-    private var eventLog: some View {
-        PanelCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    SectionLabel(text: "EVENT LOG", symbol: ">_")
-                    Spacer()
-                    Text("LOCAL ONLY")
-                        .font(MagicMouseTheme.monoTiny)
-                        .tracking(0.8)
-                        .foregroundStyle(MagicMouseTheme.mutedText)
-                }
-
-                if model.logs.isEmpty {
-                    LogLine(text: "waiting for engine events…", dimmed: true)
-                } else {
-                    ForEach(Array(model.logs.suffix(4).enumerated()), id: \.offset) { _, entry in
-                        LogLine(text: entry, dimmed: false)
-                    }
-                }
-            }
-        }
-    }
-
     private var footer: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                TerminalToggleRow(
-                    title: "START AT LOGIN",
-                    detail: "Open in the background",
-                    isOn: Binding(
-                        get: { model.launchAtLogin },
-                        set: { model.setLoginItem($0) }
-                    )
+        HStack(spacing: 12) {
+            TerminalToggleRow(
+                title: "START AT LOGIN",
+                detail: nil,
+                isOn: Binding(
+                    get: { model.launchAtLogin },
+                    set: { model.setLoginItem($0) }
                 )
-                .frame(maxWidth: .infinity, alignment: .leading)
+            )
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button {
-                    model.hide()
-                } label: {
-                    Text("[ HIDE ]")
-                        .font(MagicMouseTheme.monoSmall)
-                        .foregroundStyle(MagicMouseTheme.primaryText)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(MagicMouseTheme.border, lineWidth: 1)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Hide Magic Mouse Plus")
-
-                Button {
-                    model.quit()
-                } label: {
-                    Text("[ QUIT ]")
-                        .font(MagicMouseTheme.monoSmall)
-                        .foregroundStyle(MagicMouseTheme.warning)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(MagicMouseTheme.warning.opacity(0.7), lineWidth: 1)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Quit Magic Mouse Plus")
+            Button {
+                model.hide()
+            } label: {
+                Text("[ HIDE ]")
+                    .font(MagicMouseTheme.monoSmall)
+                    .foregroundStyle(MagicMouseTheme.primaryText)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(MagicMouseTheme.border, lineWidth: 1)
+                    }
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Hide Magic Mouse Plus")
 
-            HStack(spacing: 8) {
-                Image(systemName: "lock.shield")
-                    .font(.system(size: 11, weight: .medium))
-                Text("No network • No analytics • Just your Mac")
+            Button {
+                model.quit()
+            } label: {
+                Text("[ QUIT ]")
+                    .font(MagicMouseTheme.monoSmall)
+                    .foregroundStyle(MagicMouseTheme.warning)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .stroke(MagicMouseTheme.warning.opacity(0.7), lineWidth: 1)
+                    }
             }
-            .font(MagicMouseTheme.monoTiny)
-            .foregroundStyle(MagicMouseTheme.mutedText)
-            .frame(maxWidth: .infinity, alignment: .center)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Quit Magic Mouse Plus")
         }
-        .padding(.top, 2)
     }
 }
 
@@ -406,26 +324,6 @@ private struct StatusLamp: View {
     }
 }
 
-private struct SystemPill: View {
-    let label: String
-    let active: Bool
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(active ? MagicMouseTheme.accent : MagicMouseTheme.mutedText)
-                .frame(width: 5, height: 5)
-            Text(label)
-        }
-        .font(MagicMouseTheme.monoTiny)
-        .foregroundStyle(active ? MagicMouseTheme.accent : MagicMouseTheme.mutedText)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(MagicMouseTheme.background.opacity(0.75), in: Capsule())
-        .overlay(Capsule().stroke(MagicMouseTheme.border, lineWidth: 1))
-    }
-}
-
 private struct PermissionSeal: View {
     let granted: Bool
 
@@ -444,7 +342,7 @@ private struct PermissionSeal: View {
 
 private struct TerminalToggleRow: View {
     let title: String
-    let detail: String
+    let detail: String?
     @Binding var isOn: Bool
 
     var body: some View {
@@ -456,19 +354,17 @@ private struct TerminalToggleRow: View {
                     Text(title)
                         .font(MagicMouseTheme.monoSmall)
                         .foregroundStyle(MagicMouseTheme.primaryText)
-                    Text(detail)
-                        .font(MagicMouseTheme.monoTiny)
-                        .foregroundStyle(MagicMouseTheme.mutedText)
-                        .lineLimit(1)
+                    if let detail, !detail.isEmpty {
+                        Text(detail)
+                            .font(MagicMouseTheme.monoTiny)
+                            .foregroundStyle(MagicMouseTheme.mutedText)
+                            .lineLimit(1)
+                    }
                 }
 
                 Spacer(minLength: 6)
 
                 HStack(spacing: 6) {
-                    Text(isOn ? "ON" : "OFF")
-                        .font(MagicMouseTheme.monoTiny)
-                        .foregroundStyle(isOn ? MagicMouseTheme.accent : MagicMouseTheme.mutedText)
-
                     ZStack(alignment: isOn ? .trailing : .leading) {
                         Capsule()
                             .fill(isOn ? MagicMouseTheme.accent.opacity(0.22) : MagicMouseTheme.background)
@@ -482,6 +378,10 @@ private struct TerminalToggleRow: View {
                     }
                 }
             }
+            // Keep the hit target as wide as the visible row. Without an
+            // explicit frame, SwiftUI can preserve only the label's intrinsic
+            // width even though the parent layout stretches the row.
+            .frame(maxWidth: .infinity, minHeight: 36, alignment: .leading)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -495,22 +395,6 @@ private struct TerminalToggleRow: View {
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-}
-
-private struct LogLine: View {
-    let text: String
-    let dimmed: Bool
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(">")
-                .foregroundStyle(MagicMouseTheme.accent)
-            Text(text)
-                .foregroundStyle(dimmed ? MagicMouseTheme.mutedText : MagicMouseTheme.secondaryText)
-                .lineLimit(1)
-        }
-        .font(MagicMouseTheme.monoTiny)
-    }
 }
 
 private struct MouseDiagram: View {

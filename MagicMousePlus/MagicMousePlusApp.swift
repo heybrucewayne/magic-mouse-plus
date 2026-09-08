@@ -15,6 +15,11 @@ import AppKit
             .paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         if !launchedAtLogin { showPanel() }
     }
+    func applicationDidBecomeActive(_ notification: Notification) {
+        // Returning from System Settings after changing Accessibility or
+        // Input Monitoring must rebuild any stale TCC/event-tap session.
+        TapEngine.shared.refresh()
+    }
     private func showPanel() {
         if window == nil, let model {
             let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 780),

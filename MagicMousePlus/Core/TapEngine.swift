@@ -21,7 +21,8 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     private var recognizer = TapRecognizer()
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private var timer: Timer?
+    private var refreshTimer: Timer?
+    private var started = false
     private var observers: [NSObjectProtocol] = []
     private var enabled = false
     private var left = true
@@ -38,15 +39,16 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     private var lastInputMonitoringAccess: Bool?
 
     func start() {
-        guard timer == nil else { return }
-        timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        timer?.tolerance = 1
+        guard !started else { return }
+        started = true
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.sessionDidResignActiveNotification] {
             observers.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.suspended = true; self?.stopCapture() }
+                MainActor.assumeIsolated {
+                    self?.suspended = true
+                    self?.stopCapture()
+                    self?.scheduleRefreshIfNeeded()
+                }
             })
         }
         for name in [NSWorkspace.didWakeNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
@@ -56,6 +58,27 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         }
         refresh()
     }
+
+    private var refreshInterval: TimeInterval {
+        if !enabled { return 60 }
+        if lastAccessibilityTrust != true || lastInputMonitoringAccess != true { return 20 }
+        return connected ? 15 : 4
+    }
+
+    private func scheduleRefreshIfNeeded() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+        guard started, !suspended else { return }
+
+        let interval = refreshInterval
+        let next = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
+        }
+        next.tolerance = min(max(interval * 0.25, 1), 5)
+        refreshTimer = next
+        RunLoop.main.add(next, forMode: .common)
+    }
+
     func configure(enabled: Bool, left: Bool, right: Bool) {
         self.enabled = enabled; self.left = left; self.right = right
         invalidate(); refresh()
@@ -66,6 +89,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         recognizer.cancel()
     }
     func refresh() {
+        defer { scheduleRefreshIfNeeded() }
         guard enabled && !suspended else {
             stopCapture(); onStatus?(suspended ? "SLEEPING" : "DISABLED", false); return
         }
@@ -171,7 +195,8 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         source = nil; tap = nil
     }
     func shutdown() {
-        timer?.invalidate(); timer = nil; stopCapture()
+        started = false
+        refreshTimer?.invalidate(); refreshTimer = nil; stopCapture()
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
     }

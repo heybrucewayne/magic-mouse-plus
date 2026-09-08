@@ -23,6 +23,7 @@ int main(void) {
     frameCallback(selected,&c,1,1,1);
     assert(received==1 && observed.valid && observed.count==1 && observed.identifier==9);
     c.state=5;frameCallback(selected,&c,1,1.1,2);assert(observed.count==0);
+    int afterRelease=received;frameCallback(selected,NULL,0,1.15,3);assert(received==afterRelease);
     frameCallback(selected,NULL,1000,1.2,3);assert(!observed.valid);
     c.state=4;c.normalized.position.x=NAN;frameCallback(selected,&c,1,1.3,4);assert(!observed.valid);
     Device old=selected;MMBridgeStop();assert(stops==1 && removals==1 && !selected);

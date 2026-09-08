@@ -62,6 +62,10 @@ import ApplicationServices
                 SMAppService.openSystemSettingsLoginItems()
             } else { log(launchAtLogin ? "start at login enabled" : "start at login disabled") }
         } catch { launchAtLogin = SMAppService.mainApp.status == .enabled; log("login item: \(error.localizedDescription)") }
+        // Registering or removing the login item can make macOS refresh the
+        // app's launch/security state. Recheck the capture session immediately
+        // so a login-item change cannot leave the running app inert.
+        TapEngine.shared.refresh()
     }
     func hide() { NSApp.hide(nil) }
     func quit() { NSApp.terminate(nil) }
