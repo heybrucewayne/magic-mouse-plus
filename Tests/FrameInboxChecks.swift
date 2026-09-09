@@ -2,7 +2,8 @@ import Foundation
 import ApplicationServices
 
 @main struct FrameInboxChecks {
-    static func main() {
+    @MainActor static func main() {
+        precondition(MouseClickEvents.eventSource?.localEventsSuppressionInterval == 0)
         // Construct, but never post, mouse events. Cover offset/negative displays
         // and fractional coordinates: neither Y inversion nor scaling is allowed.
         for point in [CGPoint(x: 120, y: 80), CGPoint(x: 120, y: 900),

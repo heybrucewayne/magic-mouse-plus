@@ -4,7 +4,7 @@ import ApplicationServices
 private let syntheticMarker: Int64 = 0x4D4D504C5553
 // At most one queued main-thread delivery, with a bounded frame backlog.
 // Overflow cancels the gesture rather than dropping movement and inventing a tap.
-final class FrameInbox {
+final class FrameInbox: @unchecked Sendable {
     private let lock = NSLock()
     private var frames: [(MMFrame, Double)] = []
     private var scheduled = false
@@ -62,7 +62,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     private var recoveringMonitor = false
     private var connected = false
     private var generation: UInt64 = 0
-    private var lastInterference = -Double.infinity
+    private var suppression = TapSuppression()
     private var pointerOrigin: CGPoint?
     private var previousClick: (TapSide, Double, CGPoint)?
     private var clickCount: Int64 = 0
@@ -240,7 +240,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     func observe(_ type: CGEventType, event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             count("monitorDisabled")
-            invalidate(); lastInterference = ProcessInfo.processInfo.systemUptime
+            invalidate(); suppression.observe(.interruption, at: ProcessInfo.processInfo.systemUptime)
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             // A system selection overlay can temporarily disable this monitor.
             // Preserve a healthy touch connection when re-enabling succeeds.
@@ -260,7 +260,8 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         }
         guard event.getIntegerValueField(.eventSourceUserData) != syntheticMarker else { return }
         count("physicalEvents")
-        lastInterference = ProcessInfo.processInfo.systemUptime
+        let scrollingOrDragging = type == .scrollWheel || type == .leftMouseDragged || type == .rightMouseDragged
+        suppression.observe(scrollingOrDragging ? .scrollOrDrag : .button, at: ProcessInfo.processInfo.systemUptime)
         generation &+= 1; recognizer.cancel(); previousClick = nil
         MMBridgeRequestBoundary()
     }
@@ -271,7 +272,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         guard enabled, connected, !suspended, frame.session == bridgeSession, received >= sessionStart else { return }
         guard now-received < 0.08 else { count("staleFrames"); invalidate(); return }
         let sample = TouchSample(count: Int(frame.count), id: Int(frame.identifier), x: Double(frame.x), y: Double(frame.y), time: frame.time, valid: frame.valid)
-        guard now-lastInterference > 0.12 else {
+        guard !suppression.isActive(at: now) else {
             count("suppressedFrames")
             recognizer.consumeSuppressed(sample)
             pointerOrigin = nil
@@ -286,7 +287,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         count("recognizedTaps")
         let token = generation
         // Small settling window lets the physical mouse event cancel a tap.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + TapTuning.clickSettlingDelay) { [weak self] in
             guard let current = MouseClickEvents.pointerLocation() else { return }
             guard let self, token == self.generation, self.enabled, self.connected, !self.suspended,
                   AXIsProcessTrusted(),
@@ -326,7 +327,16 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
 // Keep pointer sampling and outgoing events in Quartz global display coordinates.
 // AppKit's NSEvent.mouseLocation uses a different vertical origin and must not
 // be passed directly to CGEvent. No screen-height conversion or Retina scaling.
-enum MouseClickEvents {
+@MainActor enum MouseClickEvents {
+    // Reuse a source instead of allocating a fresh source for every tap.
+    // Physical mouse/keyboard events must continue immediately after our pair.
+    static let eventSource: CGEventSource? = {
+        let source = CGEventSource(stateID: .privateState) ?? CGEventSource(stateID: .combinedSessionState)
+        source?.localEventsSuppressionInterval = 0
+        source?.setLocalEventsFilterDuringSuppressionState([.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents], state: .eventSuppressionStateSuppressionInterval)
+        source?.setLocalEventsFilterDuringSuppressionState([.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents], state: .eventSuppressionStateRemoteMouseDrag)
+        return source
+    }()
     static func pointerLocation() -> CGPoint? {
         guard let point = CGEvent(source: nil)?.location,
               point.x.isFinite, point.y.isFinite else { return nil }
@@ -335,7 +345,7 @@ enum MouseClickEvents {
     static func make(_ side: TapSide, at point: CGPoint, clickCount: Int64) -> [CGEvent]? {
         guard point.x.isFinite, point.y.isFinite else { return nil }
         let button: CGMouseButton = side == .left ? .left : .right
-        guard let source = CGEventSource(stateID: .privateState) ?? CGEventSource(stateID: .combinedSessionState),
+        guard let source = eventSource,
               let down = CGEvent(mouseEventSource: source, mouseType: side == .left ? .leftMouseDown : .rightMouseDown, mouseCursorPosition: point, mouseButton: button),
               let up = CGEvent(mouseEventSource: source, mouseType: side == .left ? .leftMouseUp : .rightMouseUp, mouseCursorPosition: point, mouseButton: button) else { return nil }
         let flags = CGEventSource.flagsState(.combinedSessionState)
