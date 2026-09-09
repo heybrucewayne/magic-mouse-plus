@@ -9,6 +9,16 @@ import AppKit
     private var window: NSWindow?
     private var model: AppModel?
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Finder can launch copies from both Applications and DerivedData.
+        // Only one process may own the touch stream and its TCC identity.
+        if let identifier = Bundle.main.bundleIdentifier,
+           let existing = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
+            .filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier && !$0.isTerminated })
+            .sorted(by: { $0.processIdentifier < $1.processIdentifier }).first {
+            existing.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
+            NSApp.terminate(nil)
+            return
+        }
         NSApp.setActivationPolicy(.accessory)
         model = AppModel()
         let launchedAtLogin = NSAppleEventManager.shared().currentAppleEvent?

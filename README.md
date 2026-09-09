@@ -15,12 +15,21 @@ Launch the built app and select **ALLOW ACCESS**, then enable **Magic Mouse +** 
 - Runtime-loaded MultitouchSupport with checked symbols and a C ABI boundary. Only external family 112 (Magic Mouse) is selected; built-in and external trackpads and unknown families are excluded. One Magic Mouse is active at a time.
 - Tap recognizer accepts one contact lasting 25–220 ms with at most 3.5% normalized movement. Edges and a narrow center seam are rejected. Multiple contacts, replacement contact IDs, malformed frames, long rests, and stale/out-of-order data are rejected.
 - A passive event tap observes physical mouse buttons, dragging, and scrolling; it never swallows or alters physical events. Six-point pointer movement cancels a candidate. A 25 ms release settling period allows physical clicks to cancel synthetic clicks.
+- Pointer sampling and synthetic clicks both use Quartz global display coordinates; AppKit screen coordinates are never passed to click posting. Offline event-construction tests cover both buttons, negative/offset display positions, fractional coordinates and invalid positions without posting clicks.
 - Synthetic down/up pairs preserve keyboard modifiers, mark their origin to avoid feedback, and set double/triple-click counts. No held synthetic button or tap-and-drag behavior.
-- Settings changes, sleep, session lock, disconnect and permission loss cancel pending gestures. On startup or reconfiguration, any held contact must clear before taps are accepted. This can conservatively discard the first tap if the device has not yet emitted an empty frame.
+- Settings changes, sleep, session lock, disconnect and permission loss cancel pending gestures. On startup or reconfiguration, any held contact must clear before taps are accepted. The bridge delivers an initial boundary frame and one requested boundary after physical input so idle-frame coalescing does not hide release state. If no empty frame arrives, held contacts still fail closed.
 - Bounded, memory-only lifecycle log; no touch coordinates, typed input, or click history are retained. Preferences are local UserDefaults.
-- Main-thread engine state, copied callback values, mutex-protected C device lifecycle, idle-frame coalescing, and adaptive refresh: 15 seconds while active, 4 seconds while reconnecting, 20 seconds while waiting for permissions, and 60 seconds when disabled. No continuous animation or background rendering loop. Reduced Motion disables short control transitions.
+- Main-thread engine state, copied callback values, mutex-protected C device lifecycle, idle-frame coalescing, and adaptive refresh: 15 seconds while active, 4 seconds while reconnecting, 3 seconds while waiting for permissions, and no timer when disabled or suspended. No continuous animation or background rendering loop. Reduced Motion disables short control transitions.
+
+Use a single copy in Applications. A second launch hands focus to the running copy and exits. Locally ad-hoc-signed rebuilds change the code identity: if Accessibility shows enabled but the app reports permission needed, quit the app, remove its old entry in Accessibility, add the current Applications copy, enable it, and reopen. Never grant permission to the temporary build copy for daily use.
 
 MultitouchSupport is a private, undocumented API and can change across macOS versions. Unknown devices fail closed. This is a locally signed utility, not a notarized or App Store distribution. Device generation coverage and physical tap feel require hardware verification.
+
+## Background reliability
+
+Frame delivery uses a bounded 32-frame inbox and a single queued main-thread drain. Overflow or stale input cancels the candidate gesture; it never synthesizes a delayed click. The inbox is covered by ordered, overflow and concurrent-producer stress checks. Bridge checks include 1,000 stop/start cycles and recovery when a device reports stopped.
+
+Suppressed gestures still consume valid release boundaries, including during physical selection/drag cooldown. Regression checks include 100 successive selection/release/recovery sequences. Sleep and inactive-session state are tracked independently. A disabled event monitor is re-enabled first and rebuilt outside its callback only if still disabled, and the periodic health check remains available for later recovery. Disabling the feature stops its timer. There is no continuous rendering or animation loop. These safeguards do not guarantee recovery from an OS/private-framework crash or replace physical-device sleep/reconnect testing.
 
 ## Layout
 

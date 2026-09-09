@@ -153,7 +153,7 @@ struct MagicMousePanel: View {
                         .font(MagicMouseTheme.heading)
                         .foregroundStyle(MagicMouseTheme.primaryText)
 
-                    Text("Permission needed")
+                    Text(model.status == "INPUT ACCESS NEEDED" ? "Detects mouse clicks and scrolling to prevent duplicate clicks. No keyboard monitoring." : "Permission needed")
                         .font(MagicMouseTheme.body)
                         .foregroundStyle(MagicMouseTheme.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)

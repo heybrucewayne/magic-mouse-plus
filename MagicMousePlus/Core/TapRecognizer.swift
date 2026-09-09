@@ -12,6 +12,12 @@ struct TapRecognizer {
     private var lastTap = -Double.infinity
     mutating func reset() { self = TapRecognizer() }
     mutating func cancel() { initial = nil; blocked = true }
+    // Physical clicks/selection tools suppress output, not the release boundary.
+    // A valid release must re-arm the next gesture even during suppression.
+    mutating func consumeSuppressed(_ sample: TouchSample) {
+        cancel()
+        if sample.count == 0 { _ = consume(sample) }
+    }
     mutating func consume(_ sample: TouchSample) -> TapSide? {
         guard sample.valid, sample.time.isFinite, sample.time > lastTime,
               sample.count >= 0, sample.count <= 16 else { cancel(); return nil }

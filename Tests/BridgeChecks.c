@@ -19,6 +19,14 @@ int main(void) {
     startDevice=begin;stopDevice=end;isRunning=active;registerFrame=reg;unregisterFrame=unreg;
     assert(MMBridgeRefresh(receive)==1 && starts==1 && registrations==1);
     assert(MMBridgeRefresh(receive)==1 && starts==1);
+    frameCallback(selected,NULL,0,0.5,0);
+    assert(received==1 && observed.count==0 && observed.valid);
+    frameCallback(selected,NULL,0,0.6,0);assert(received==1);
+    MMBridgeRequestBoundary();
+    frameCallback(selected,NULL,0,0.7,0);assert(received==2);
+    frameCallback(selected,NULL,0,0.8,0);assert(received==2);
+    assert(starts==1 && registrations==1);
+    received=0;
     Contact c={.path=9,.state=4,.normalized.position={0.25,0.6}};
     frameCallback(selected,&c,1,1,1);
     assert(received==1 && observed.valid && observed.count==1 && observed.identifier==9);
@@ -29,6 +37,14 @@ int main(void) {
     Device old=selected;MMBridgeStop();assert(stops==1 && removals==1 && !selected);
     int count=received;frameCallback(old,&c,1,1.4,5);assert(received==count);
     MMBridgeStop();assert(stops==1);
-    mockFamily=99;assert(MMBridgeRefresh(receive)==0 && starts==1);
+    // A stopped device must be registered again without leaking registrations.
+    assert(MMBridgeRefresh(receive)==1);
+    int before=starts;
+    running=false;
+    assert(MMBridgeRefresh(receive)==1 && starts==before+1);
+    for (int i=0;i<1000;i++) { MMBridgeStop(); assert(MMBridgeRefresh(receive)==1); }
+    MMBridgeStop(); assert(registrations==removals && starts==stops);
+    int totalStarts=starts;
+    mockFamily=99;assert(MMBridgeRefresh(receive)==0 && starts==totalStarts);
     puts("PASS: bridge ABI, filtering, frame validation, lifecycle and late-callback checks");
 }

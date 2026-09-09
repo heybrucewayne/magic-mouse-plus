@@ -28,6 +28,7 @@ static void *library;
 static Device selected;
 static MMFrameHandler sink;
 static bool hadActiveContact;
+static bool needsInitialFrame;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void frameCallback(Device device, Contact *contacts, int count, double time, int frame) {
@@ -51,7 +52,8 @@ static void frameCallback(Device device, Contact *contacts, int count, double ti
     // MultitouchSupport can emit an empty frame continuously while the
     // mouse is idle. Deliver only contact frames and the one release frame
     // needed to close a gesture; this keeps the login-item process quiet.
-    bool shouldDeliver = active || hadActiveContact || (!output.valid && count != 0);
+    bool shouldDeliver = needsInitialFrame || active || hadActiveContact || (!output.valid && count != 0);
+    needsInitialFrame = false;
     hadActiveContact = active;
     pthread_mutex_unlock(&lock);
     if (!shouldDeliver) return;
@@ -73,9 +75,14 @@ bool MMBridgeLoad(void) {
 #undef LOAD
     return MMBridgeLoad();
 }
+void MMBridgeRequestBoundary(void) {
+    pthread_mutex_lock(&lock);
+    if (selected) needsInitialFrame=true;
+    pthread_mutex_unlock(&lock);
+}
 void MMBridgeStop(void) {
     pthread_mutex_lock(&lock);
-    Device old=selected; selected=NULL; sink=NULL; hadActiveContact=false;
+    Device old=selected; selected=NULL; sink=NULL; hadActiveContact=false; needsInitialFrame=false;
     pthread_mutex_unlock(&lock);
     // Never hold the callback lock while asking the framework to stop.
     if (old) { unregisterFrame(old,frameCallback); stopDevice(old); CFRelease(old); }
@@ -95,7 +102,7 @@ int MMBridgeRefresh(MMFrameHandler handler) {
     MMBridgeStop();
     int result=0;
     if (candidate) {
-        pthread_mutex_lock(&lock); selected=candidate; sink=handler; pthread_mutex_unlock(&lock);
+        pthread_mutex_lock(&lock); selected=candidate; sink=handler; needsInitialFrame=true; pthread_mutex_unlock(&lock);
         registerFrame(candidate,frameCallback);
         startDevice(candidate,0);
         if (isRunning(candidate)) result=1;

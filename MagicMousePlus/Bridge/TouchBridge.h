@@ -8,5 +8,7 @@ typedef void (*MMFrameHandler)(MMFrame frame);
 bool MMBridgeLoad(void);
 int MMBridgeRefresh(MMFrameHandler handler);
 void MMBridgeStop(void);
+// Request one boundary frame after interference without restarting the device.
+void MMBridgeRequestBoundary(void);
 
 #endif

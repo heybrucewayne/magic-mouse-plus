@@ -8,4 +8,7 @@ swiftc -module-cache-path "$module_cache" MagicMousePlus/Core/TapRecognizer.swif
 build/checks/tap-checks
 clang -framework CoreFoundation Tests/BridgeChecks.c -o build/checks/bridge-checks
 build/checks/bridge-checks
+clang -c MagicMousePlus/Bridge/TouchBridge.c -o build/checks/touch-bridge.o
+swiftc -module-cache-path "$module_cache" -import-objc-header MagicMousePlus/Bridge/TouchBridge.h MagicMousePlus/Core/TapRecognizer.swift MagicMousePlus/Core/TapEngine.swift Tests/FrameInboxChecks.swift build/checks/touch-bridge.o -o build/checks/inbox-checks
+build/checks/inbox-checks
 xcodebuild -project MagicMousePlus.xcodeproj -scheme MagicMousePlus -configuration Release -derivedDataPath "${TMPDIR:-/tmp}/magic-mouse-plus-build" build

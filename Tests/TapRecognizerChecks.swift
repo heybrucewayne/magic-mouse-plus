@@ -21,6 +21,23 @@ import Foundation
     var r = TapRecognizer(); _ = r.consume(sample(1)); r.cancel()
     expect(r.consume(sample(1.1,0,0,0)) == nil, "physical click cancellation")
     _ = r.consume(sample(1.3)); expect(r.consume(sample(1.4,0,0,0)) == .left, "recovery")
+    var recovery = TapRecognizer()
+    _ = recovery.consume(sample(2))
+    recovery.consumeSuppressed(sample(2.05,0,0,0))
+    _ = recovery.consume(sample(2.2))
+    expect(recovery.consume(sample(2.3,0,0,0)) == .left, "first tap after suppressed release")
+    for i in 0..<100 {
+        let t = 3 + Double(i)
+        _ = recovery.consume(sample(t))
+        recovery.consumeSuppressed(sample(t+0.02))
+        recovery.consumeSuppressed(sample(t+0.04,0,0,0))
+        _ = recovery.consume(sample(t+0.2,0.75))
+        expect(recovery.consume(sample(t+0.3,0,0,0)) == .right, "repeated selection recovery")
+    }
+    recovery.cancel()
+    recovery.consumeSuppressed(TouchSample(count: 0, id: 0, x: 0, y: 0, time: 104, valid: false))
+    _ = recovery.consume(sample(104.1))
+    expect(recovery.consume(sample(104.2,0,0,0)) == nil, "invalid release cannot rearm")
     print("PASS: \(checks) tap recognizer checks")
  }
 }
