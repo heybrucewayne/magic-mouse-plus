@@ -38,6 +38,15 @@ import Foundation
     recovery.consumeSuppressed(TouchSample(count: 0, id: 0, x: 0, y: 0, time: 104, valid: false))
     _ = recovery.consume(sample(104.1))
     expect(recovery.consume(sample(104.2,0,0,0)) == nil, "invalid release cannot rearm")
+    var newSession = TapRecognizer()
+    _ = newSession.consume(sample(5000))
+    _ = newSession.consume(sample(5000.1,0,0,0))
+    // A reconnected device may restart its timestamp origin. The engine must
+    // reset and require a clear boundary before accepting this new session.
+    newSession.reset(); newSession.cancel()
+    _ = newSession.consume(sample(0.01,0,0,0))
+    _ = newSession.consume(sample(0.1))
+    expect(newSession.consume(sample(0.2,0,0,0)) == .left, "new device timestamp origin")
     print("PASS: \(checks) tap recognizer checks")
  }
 }

@@ -5,7 +5,8 @@ static MMFrame observed;
 static int received, registrations, removals, starts, stops;
 static bool running;
 static int mockFamily=112;
-static CFArrayRef mockList(void) { const void *d=CFSTR("test-device"); return CFArrayCreate(NULL,&d,1,&kCFTypeArrayCallBacks); }
+static Device mockDevice;
+static CFArrayRef mockList(void) { const void *d=mockDevice; return CFArrayCreate(NULL,&d,1,&kCFTypeArrayCallBacks); }
 static int family(Device d,int *out) { *out=mockFamily; return 0; }
 static bool builtIn(Device d) { return false; }
 static int begin(Device d,int mode) { starts++;running=true;return 0; }
@@ -15,10 +16,13 @@ static void reg(Device d,Callback c) { registrations++; }
 static void unreg(Device d,Callback c) { removals++; }
 static void receive(MMFrame f) { received++;observed=f; }
 int main(void) {
+    mockDevice=CFSTR("test-device");
     library=(void*)1;createList=mockList;getFamily=family;isBuiltIn=builtIn;
     startDevice=begin;stopDevice=end;isRunning=active;registerFrame=reg;unregisterFrame=unreg;
     assert(MMBridgeRefresh(receive)==1 && starts==1 && registrations==1);
-    assert(MMBridgeRefresh(receive)==1 && starts==1);
+    uint64_t firstSession=MMBridgeSession();
+    assert(firstSession>0);
+    assert(MMBridgeRefresh(receive)==1 && starts==1 && MMBridgeSession()==firstSession);
     frameCallback(selected,NULL,0,0.5,0);
     assert(received==1 && observed.count==0 && observed.valid);
     frameCallback(selected,NULL,0,0.6,0);assert(received==1);
@@ -29,7 +33,7 @@ int main(void) {
     received=0;
     Contact c={.path=9,.state=4,.normalized.position={0.25,0.6}};
     frameCallback(selected,&c,1,1,1);
-    assert(received==1 && observed.valid && observed.count==1 && observed.identifier==9);
+    assert(received==1 && observed.valid && observed.count==1 && observed.identifier==9 && observed.session==firstSession);
     c.state=5;frameCallback(selected,&c,1,1.1,2);assert(observed.count==0);
     int afterRelease=received;frameCallback(selected,NULL,0,1.15,3);assert(received==afterRelease);
     frameCallback(selected,NULL,1000,1.2,3);assert(!observed.valid);
@@ -42,6 +46,15 @@ int main(void) {
     int before=starts;
     running=false;
     assert(MMBridgeRefresh(receive)==1 && starts==before+1);
+    assert(MMBridgeSession()>firstSession);
+    uint64_t beforeReplacement=MMBridgeSession();
+    Device replaced=selected;
+    mockDevice=CFSTR("replacement-device");
+    assert(MMBridgeRefresh(receive)==1 && MMBridgeSession()>beforeReplacement);
+    count=received;
+    frameCallback(replaced,NULL,0,0.01,0);assert(received==count);
+    frameCallback(selected,NULL,0,0.01,0);
+    assert(observed.session==MMBridgeSession() && observed.time==0.01);
     for (int i=0;i<1000;i++) { MMBridgeStop(); assert(MMBridgeRefresh(receive)==1); }
     MMBridgeStop(); assert(registrations==removals && starts==stops);
     int totalStarts=starts;

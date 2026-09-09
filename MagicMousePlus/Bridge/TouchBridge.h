@@ -2,12 +2,13 @@
 #define MM_TOUCH_BRIDGE_H
 #include <stdbool.h>
 #include <stdint.h>
-typedef struct { int count; int identifier; float x,y; double time; bool valid; } MMFrame;
+typedef struct { int count; int identifier; float x,y; double time; bool valid; uint64_t session; } MMFrame;
 typedef void (*MMFrameHandler)(MMFrame frame);
 // All lifecycle calls are main-thread only; handler runs on the framework thread.
 bool MMBridgeLoad(void);
 int MMBridgeRefresh(MMFrameHandler handler);
 void MMBridgeStop(void);
+uint64_t MMBridgeSession(void);
 // Request one boundary frame after interference without restarting the device.
 void MMBridgeRequestBoundary(void);
 

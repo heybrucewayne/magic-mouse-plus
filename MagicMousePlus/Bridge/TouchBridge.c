@@ -29,6 +29,7 @@ static Device selected;
 static MMFrameHandler sink;
 static bool hadActiveContact;
 static bool needsInitialFrame;
+static uint64_t sessionGeneration;
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void frameCallback(Device device, Contact *contacts, int count, double time, int frame) {
@@ -36,7 +37,7 @@ static void frameCallback(Device device, Contact *contacts, int count, double ti
     pthread_mutex_lock(&lock);
     if (device != selected || !sink) { pthread_mutex_unlock(&lock); return; }
     MMFrameHandler callback = sink;
-    MMFrame output = {.time=time, .valid=isfinite(time) && count>=0 && count<=16};
+    MMFrame output = {.session=sessionGeneration, .time=time, .valid=isfinite(time) && count>=0 && count<=16};
     if (output.valid && count && !contacts) output.valid=false;
     if (output.valid) for (int i=0;i<count;i++) {
         Contact c=contacts[i];
@@ -75,6 +76,12 @@ bool MMBridgeLoad(void) {
 #undef LOAD
     return MMBridgeLoad();
 }
+uint64_t MMBridgeSession(void) {
+    pthread_mutex_lock(&lock);
+    uint64_t result = sessionGeneration;
+    pthread_mutex_unlock(&lock);
+    return result;
+}
 void MMBridgeRequestBoundary(void) {
     pthread_mutex_lock(&lock);
     if (selected) needsInitialFrame=true;
@@ -102,7 +109,7 @@ int MMBridgeRefresh(MMFrameHandler handler) {
     MMBridgeStop();
     int result=0;
     if (candidate) {
-        pthread_mutex_lock(&lock); selected=candidate; sink=handler; needsInitialFrame=true; pthread_mutex_unlock(&lock);
+        pthread_mutex_lock(&lock); selected=candidate; sessionGeneration++; sink=handler; needsInitialFrame=true; pthread_mutex_unlock(&lock);
         registerFrame(candidate,frameCallback);
         startDevice(candidate,0);
         if (isRunning(candidate)) result=1;

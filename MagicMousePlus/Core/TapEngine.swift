@@ -50,6 +50,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
     private var refreshTimer: Timer?
+    private var foregroundRefresh: DispatchWorkItem?
     private var started = false
     private var observers: [NSObjectProtocol] = []
     private var enabled = false
@@ -66,6 +67,41 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     private var previousClick: (TapSide, Double, CGPoint)?
     private var clickCount: Int64 = 0
     private var sessionStart = Double.infinity
+    private var bridgeSession: UInt64 = 0
+    private var inputActivity: NSObjectProtocol?
+    private func updateInputActivity() {
+        let needed = started && enabled && connected && !suspended
+        if needed, inputActivity == nil {
+            inputActivity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
+                reason: "Respond to Magic Mouse taps while other applications are active")
+        } else if !needed, let activity = inputActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            inputActivity = nil
+        }
+    }
+    private let diagnosticsEnabled = ProcessInfo.processInfo.arguments.contains("--diagnostics")
+    private var diagnosticCounts: [String: Int] = [:]
+    private var lastFrameReceived: Double?
+    private func count(_ key: String) { if diagnosticsEnabled { diagnosticCounts[key, default: 0] += 1 } }
+    private func writeDiagnostics() {
+        guard diagnosticsEnabled else { return }
+        var values: [String: Any] = diagnosticCounts
+        values["uptime"] = ProcessInfo.processInfo.systemUptime
+        values["frameAge"] = lastFrameReceived.map { ProcessInfo.processInfo.systemUptime - $0 } ?? -1
+        values["connected"] = connected
+        values["bridgeSession"] = bridgeSession
+        values["inputActivity"] = inputActivity != nil
+        values["suspended"] = suspended
+        values["trusted"] = AXIsProcessTrusted()
+        values["monitorEnabled"] = tap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+        values["sessionLeftDown"] = CGEventSource.buttonState(.combinedSessionState, button: .left)
+        values["hardwareLeftDown"] = CGEventSource.buttonState(.hidSystemState, button: .left)
+        values["sessionRightDown"] = CGEventSource.buttonState(.combinedSessionState, button: .right)
+        values["hardwareRightDown"] = CGEventSource.buttonState(.hidSystemState, button: .right)
+        if let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]) {
+            try? data.write(to: URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("magic-mouse-plus-diagnostics.json"), options: .atomic)
+        }
+    }
     private var lastAccessibilityTrust: Bool?
     private var lastInputMonitoringAccess: Bool?
 
@@ -92,10 +128,26 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
                 }
             })
         }
+        // Check all application transitions, not a hard-coded list of apps.
+        // Coalesce rapid switching; do not restart a healthy stream or reset taps.
+        observers.append(center.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                           object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.started, self.enabled, !self.suspended else { return }
+                self.foregroundRefresh?.cancel()
+                let work = DispatchWorkItem { [weak self] in
+                    guard let self, self.started, self.enabled, !self.suspended else { return }
+                    self.refresh()
+                }
+                self.foregroundRefresh = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: work)
+            }
+        })
         refresh()
     }
 
     private var refreshInterval: TimeInterval {
+        if diagnosticsEnabled { return 3 }
         if !enabled { return 60 }
         if lastAccessibilityTrust != true || lastInputMonitoringAccess != true { return 3 }
         return connected ? 15 : 4
@@ -129,7 +181,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
 
     func refresh() {
         guard started else { return }
-        defer { scheduleRefreshIfNeeded() }
+        defer { updateInputActivity(); writeDiagnostics(); scheduleRefreshIfNeeded() }
         guard enabled && !suspended else {
             stopCapture(); onStatus?(suspended ? "SLEEPING" : "DISABLED", false); return
         }
@@ -157,11 +209,18 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
             stopCapture(); onStatus?("INPUT ACCESS NEEDED", false); return
         }
         let result = MMBridgeRefresh(receiveFrame)
-        if result != 1 { invalidate() }
+        let currentSession = MMBridgeSession()
+        if result != 1 || currentSession != bridgeSession {
+            bridgeSession = currentSession
+            sessionStart = ProcessInfo.processInfo.systemUptime
+            invalidate()
+            count("streamResets")
+        }
         connected = result == 1
         onStatus?(result == 1 ? "ACTIVE" : result == -1 ? "ENGINE UNAVAILABLE" : result == -2 ? "DEVICE START FAILED" : "WAITING FOR MOUSE", connected)
     }
     private func installMonitor() -> Bool {
+        count("monitorInstalls")
         let types: [CGEventType] = [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp, .scrollWheel, .leftMouseDragged, .rightMouseDragged]
         let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
         guard let newTap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .listenOnly, eventsOfInterest: mask, callback: monitorEvent, userInfo: nil),
@@ -180,6 +239,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
     }
     func observe(_ type: CGEventType, event: CGEvent) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            count("monitorDisabled")
             invalidate(); lastInterference = ProcessInfo.processInfo.systemUptime
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             // A system selection overlay can temporarily disable this monitor.
@@ -199,16 +259,20 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
             return
         }
         guard event.getIntegerValueField(.eventSourceUserData) != syntheticMarker else { return }
+        count("physicalEvents")
         lastInterference = ProcessInfo.processInfo.systemUptime
         generation &+= 1; recognizer.cancel(); previousClick = nil
         MMBridgeRequestBoundary()
     }
     func receive(_ frame: MMFrame, received: Double) {
+        count("frames")
+        lastFrameReceived = received
         let now = ProcessInfo.processInfo.systemUptime
-        guard enabled, connected, !suspended, received >= sessionStart else { return }
-        guard now-received < 0.08 else { invalidate(); return }
+        guard enabled, connected, !suspended, frame.session == bridgeSession, received >= sessionStart else { return }
+        guard now-received < 0.08 else { count("staleFrames"); invalidate(); return }
         let sample = TouchSample(count: Int(frame.count), id: Int(frame.identifier), x: Double(frame.x), y: Double(frame.y), time: frame.time, valid: frame.valid)
         guard now-lastInterference > 0.12 else {
+            count("suppressedFrames")
             recognizer.consumeSuppressed(sample)
             pointerOrigin = nil
             return
@@ -219,6 +283,7 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         let result = recognizer.consume(sample)
         if frame.count == 0 { pointerOrigin = nil }
         guard let side = result, (side == .left ? left : right) else { return }
+        count("recognizedTaps")
         let token = generation
         // Small settling window lets the physical mouse event cancel a tap.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.025) { [weak self] in
@@ -239,16 +304,19 @@ private func monitorEvent(_ proxy: CGEventTapProxy, _ type: CGEventType, _ event
         } else { clickCount = 1 }
         guard let events = MouseClickEvents.make(side, at: point, clickCount: clickCount) else { return }
         for event in events { event.post(tap: .cghidEventTap) }
+        count("postedClicks")
         previousClick = (side, now, point); onClick?(side)
     }
     private func stopCapture() {
         connected = false; sessionStart = .infinity; invalidate(); MMBridgeStop()
+        updateInputActivity()
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }
         if let tap { CFMachPortInvalidate(tap) }
         source = nil; tap = nil
     }
     func shutdown() {
         started = false
+        foregroundRefresh?.cancel(); foregroundRefresh = nil
         refreshTimer?.invalidate(); refreshTimer = nil; stopCapture()
         for observer in observers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
         observers.removeAll()
