@@ -31,7 +31,7 @@ import ServiceManagement
         let currentPath = Bundle.main.bundleURL.standardizedFileURL.path
         let defaults = UserDefaults.standard
         let previousPath = defaults.string(forKey: "loginItemBundlePath")
-        let iconRefreshVersion = 1
+        let iconRefreshVersion = 2
 
         // Moving the app changes the bundle path but can leave the existing
         // SMAppService record pointing at the old copy and its cached icon.
@@ -58,13 +58,13 @@ import ServiceManagement
     }
     private func showPanel() {
         if window == nil, let model {
-            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 740, height: 780),
+            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 660),
                                  styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
             panel.title = "Magic Mouse +"
             panel.contentView = NSHostingView(rootView: MagicMousePanel(model: model))
             panel.isReleasedWhenClosed = false; panel.delegate = self
             panel.titlebarAppearsTransparent = true
-            panel.backgroundColor = NSColor(calibratedRed: 0.025, green: 0.055, blue: 0.045, alpha: 1)
+            panel.backgroundColor = NSColor(white: 0.055, alpha: 1)
             panel.center(); window = panel
         }
         window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)

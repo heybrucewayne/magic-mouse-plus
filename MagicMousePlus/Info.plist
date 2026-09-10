@@ -6,12 +6,12 @@
 <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 <key>CFBundleName</key><string>Magic Mouse +</string>
 <key>CFBundleDisplayName</key><string>Magic Mouse +</string>
-<key>CFBundleIconFile</key><string>MagicMousePlusIcon</string>
-<key>CFBundleIconName</key><string>MagicMousePlusIcon</string>
-<key>CFBundleIconFiles</key><array><string>MagicMousePlusIcon</string></array>
+<key>CFBundleIconFile</key><string>MagicMousePlusLogo</string>
+<key>CFBundleIconName</key><string>MagicMousePlusLogo</string>
+<key>CFBundleIconFiles</key><array><string>MagicMousePlusLogo</string></array>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>1.0.1</string>
-<key>CFBundleVersion</key><string>2</string>
+<key>CFBundleShortVersionString</key><string>1.0.2</string>
+<key>CFBundleVersion</key><string>3</string>
 <key>LSMinimumSystemVersion</key><string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
