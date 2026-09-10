@@ -31,18 +31,22 @@ import ServiceManagement
         let currentPath = Bundle.main.bundleURL.standardizedFileURL.path
         let defaults = UserDefaults.standard
         let previousPath = defaults.string(forKey: "loginItemBundlePath")
+        let iconRefreshVersion = 1
 
         // Moving the app changes the bundle path but can leave the existing
         // SMAppService record pointing at the old copy and its cached icon.
-        guard previousPath != currentPath else { return }
-        guard SMAppService.mainApp.status == .enabled else {
+        let pathChanged = previousPath != currentPath
+        let iconNeedsRefresh = defaults.integer(forKey: "loginItemIconRefreshVersion") < iconRefreshVersion
+        guard pathChanged || iconNeedsRefresh else { return }
+        guard SMAppService.mainApp.status == .enabled || previousPath != nil else {
             defaults.set(currentPath, forKey: "loginItemBundlePath")
             return
         }
         do {
-            try SMAppService.mainApp.unregister()
+            try? SMAppService.mainApp.unregister()
             try SMAppService.mainApp.register()
             defaults.set(currentPath, forKey: "loginItemBundlePath")
+            defaults.set(iconRefreshVersion, forKey: "loginItemIconRefreshVersion")
         } catch {
             // Keep the old marker so the next launch retries the refresh.
         }
