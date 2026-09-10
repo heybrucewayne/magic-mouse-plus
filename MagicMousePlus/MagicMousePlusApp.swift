@@ -31,7 +31,7 @@ import ServiceManagement
         let currentPath = Bundle.main.bundleURL.standardizedFileURL.path
         let defaults = UserDefaults.standard
         let previousPath = defaults.string(forKey: "loginItemBundlePath")
-        let iconRefreshVersion = 2
+        let iconRefreshVersion = 3
 
         // Moving the app changes the bundle path but can leave the existing
         // SMAppService record pointing at the old copy and its cached icon.
