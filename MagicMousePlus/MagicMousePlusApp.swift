@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 @main struct MagicMousePlusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
@@ -20,10 +21,31 @@ import AppKit
             return
         }
         NSApp.setActivationPolicy(.accessory)
+        refreshLoginItemLocationIfNeeded()
         model = AppModel()
         let launchedAtLogin = NSAppleEventManager.shared().currentAppleEvent?
             .paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
         if !launchedAtLogin { showPanel() }
+    }
+    private func refreshLoginItemLocationIfNeeded() {
+        let currentPath = Bundle.main.bundleURL.standardizedFileURL.path
+        let defaults = UserDefaults.standard
+        let previousPath = defaults.string(forKey: "loginItemBundlePath")
+
+        // Moving the app changes the bundle path but can leave the existing
+        // SMAppService record pointing at the old copy and its cached icon.
+        guard previousPath != currentPath else { return }
+        guard SMAppService.mainApp.status == .enabled else {
+            defaults.set(currentPath, forKey: "loginItemBundlePath")
+            return
+        }
+        do {
+            try SMAppService.mainApp.unregister()
+            try SMAppService.mainApp.register()
+            defaults.set(currentPath, forKey: "loginItemBundlePath")
+        } catch {
+            // Keep the old marker so the next launch retries the refresh.
+        }
     }
     func applicationDidBecomeActive(_ notification: Notification) {
         // Returning from System Settings after changing Accessibility or
