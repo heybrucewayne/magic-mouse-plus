@@ -58,7 +58,7 @@ import ServiceManagement
     }
     private func showPanel() {
         if window == nil, let model {
-            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 660),
+            let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 600),
                                  styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
             panel.title = "Magic Mouse +"
             panel.contentView = NSHostingView(rootView: MagicMousePanel(model: model))

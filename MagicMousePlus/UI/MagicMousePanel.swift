@@ -6,38 +6,19 @@ struct MagicMousePanel: View {
     private var needsPermission: Bool {
         !model.permissionGranted || model.status == "INPUT ACCESS NEEDED"
     }
-    private var status: String {
-        if !model.enabled { return "Paused" }
-        if needsPermission { return "Permission required" }
-        if model.status == "ACTIVE" { return "Ready to tap" }
-        if model.status == "SLEEPING" { return "Sleeping" }
-        return model.deviceConnected ? "Connecting…" : "Connect your Magic Mouse"
-    }
-
     var body: some View {
-        VStack(spacing: 24) {
-            HStack {
-                Text("Magic Mouse +")
-                    .font(.system(size: 20, weight: .semibold))
-                Spacer()
-                Circle().fill(model.status == "ACTIVE" ? Color.white : Color.gray)
-                    .frame(width: 6, height: 6)
-                Text(status).font(.system(size: 12)).foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 30) {
+        VStack(spacing: 14) {
+            HStack(spacing: 22) {
                 mouse
-                    .frame(width: 140, height: 200)
                 VStack(alignment: .leading, spacing: 10) {
                     Text("A lighter touch.")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .font(.system(size: 26, weight: .semibold, design: .rounded))
                     Text("Tap the surface to click.")
                         .font(.system(size: 14))
                         .foregroundStyle(.secondary)
                 }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
 
             VStack(spacing: 0) {
                 setting("Tap to click", symbol: "hand.tap", isOn: $model.enabled)
@@ -66,7 +47,8 @@ struct MagicMousePanel: View {
                     Button("Open Settings") { model.requestPermission() }
                         .buttonStyle(SoftButton(primary: true))
                 }
-                .padding(16)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
                 .background(Color.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 16))
             }
 
@@ -84,9 +66,9 @@ struct MagicMousePanel: View {
                     .accessibilityLabel("Hide Magic Mouse Plus")
             }
         }
-        .padding(30)
+        .padding(24)
         .frame(width: 560)
-        .frame(minHeight: 620)
+        .frame(minHeight: 560)
         .background(Color(white: 0.055))
         .foregroundStyle(Color(white: 0.94))
         .preferredColorScheme(.dark)
